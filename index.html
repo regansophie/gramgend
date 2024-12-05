@@ -160,8 +160,31 @@
 
     // Combine and randomize
     const allTrials = jsPsych.randomization.shuffle([...testTrials, ...controlTrials]);
+
+    //Participant Info
+    this.timeline.push({
+      type: jsPsychSurveyText,
+      questions: [
+        { prompt: "Roll Call Number", name: "roll_call", required: true },
+        { prompt: "Gender", name: "gender", required: true },
+        { prompt: "Birth Month", name: "birth_month", required: true },
+        { prompt: "Birth Year", name: "birth_year", required: true },
+        { prompt: "Birth Day", name: "birth_day", required: true },
+      ],
+      preamble: "<p>Please fill in the following information:</p>",
+    });
+   
     this.timeline.push(...allTrials);
 
+    //Save the data
+    this.timeline.push({
+          type: jsPsychPipe,
+          action: "save",
+          experiment_id: "7LVKO9Q967wC",
+          filename: `experiment_data${Math.floor(Math.random() * 100000000)}.csv`,
+          data_string: () => this.jsPsych.data.get().csv(),
+        });
+    
     // End of experiment message
     this.timeline.push({
       type: jsPsychInstructions,
