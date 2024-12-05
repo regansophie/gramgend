@@ -64,69 +64,75 @@
 
   <script>
    const NUM_DISTRACTORS = 5; // Keep this constant for now
+   const TOTAL_TRIALS = 2;
+   let session;
+   let selectedLanguage; // Declare globally
 
-    let session;
+
 
     async function init() {
-  const jsPsych = initJsPsych();
+      const jsPsych = initJsPsych();
 
-  // Ask for the language selection
-  const languageSelection = {
-    type: jsPsychHtmlButtonResponse,
-    stimulus: '<p>Please select the language for the experiment:</p>',
-    choices: ['Hindi', 'Gujarati'],
-  };
+      // Ask for the language selection
+      const languageSelection = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: '<p>Please select the language for the experiment:</p>',
+        choices: ['Hindi', 'Gujarati'],
+      };
 
-  const selectedLanguage = await jsPsych.run([languageSelection]).then(() => {
-    return jsPsych.data.get().last(1).values()[0].response === 0 ? 'Hindi' : 'Gujarati';
-  });
+      selectedLanguage = await jsPsych.run([languageSelection]).then(() => {
+        return jsPsych.data.get().last(1).values()[0].response === 0 ? 'Hindi' : 'Gujarati';
+      });
 
-  console.log(`Selected language: ${selectedLanguage}`);
+      console.log(`Selected language: ${selectedLanguage}`);
 
-  // Adjust the base audio path based on the language selection
-  const BASE_AUDIO_PATH = `edited audio/${selectedLanguage}/Final Audio/`;
-  const base_audio_without_final = `edited audio/${selectedLanguage}`;
-  
+      // Adjust the base audio path based on the language selection
+      const BASE_AUDIO_PATH = `edited audio/${selectedLanguage}/Final Audio/`;
+      const base_audio_without_final = `edited audio/${selectedLanguage}`;
+      
 
-  console.log("Loading image data...");
-  const imageResponse = await fetch("image-data.json");
-  const imageData = await imageResponse.json();
-  console.log(`${imageData}`);
+      console.log("Loading image data...");
+      const imageResponse = await fetch("image-data.json");
+      const imageData = await imageResponse.json();
+      console.log(`${imageData}`);
 
-  console.log("Loading audio data...");
-  const audioResponse = await fetch("audio-data.json");
-  const audioData = await audioResponse.json();
+      console.log("Loading audio data...");
+      let audioResponse;
+        if (selectedLanguage === 'Hindi') {
+          audioResponse = await fetch("audio-data-Hindi.json");
+        } else {
+          audioResponse = await fetch("audio-data-Gujarati.json");
+        }
+        // Parse the JSON response
+        const audioData = await audioResponse.json();
 
-  console.log("Validating files...");
-  const validFiles = imageData.images.filter((img) => {
-    const imageName = img.split("/").pop().split(".")[0];
-    const regularAudio = `${BASE_AUDIO_PATH}${imageName}.wav`;
-    return audioData.audio.some((audio) => audio.includes(regularAudio));
-  });
+      console.log("Validating files...");
+      const validFiles = imageData.images.filter((img) => {
+        const imageName = img.split("/").pop().split(".")[0];
+        const regularAudio = `${BASE_AUDIO_PATH}${imageName}.wav`;
+        return audioData.audio.some((audio) => audio.includes(regularAudio));
+      });
 
-  console.log(`Total trials: ${validFiles.length}`);
-  const preload = {
-    type: jsPsychPreload,
-    images: validFiles,
-    audio: validFiles.map((img) => {
-      const imageName = img.split("/").pop().split(".")[0];
-      return `${BASE_AUDIO_PATH}${imageName}.wav`;
-    }),
-  };
-
-
-  const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final);
-
-  jsPsych.run([preload, ...session.timeline]);
-}
+      console.log(`Total trials: ${validFiles.length}`);
+      const preload = {
+        type: jsPsychPreload,
+        images: validFiles,
+        audio: validFiles.map((img) => {
+          const imageName = img.split("/").pop().split(".")[0];
+          return `${BASE_AUDIO_PATH}${imageName}.wav`;
+        }),
+      };
 
 
+      const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final);
+
+      jsPsych.run([preload, ...session.timeline]);
+    }
 
 
     // Initialize the experiment
     init();
       
-
 
   // Validate that each image has a corresponding audio file
     function validateFiles(images, audioFiles) {
@@ -161,6 +167,9 @@
     // Combine and randomize
     const allTrials = jsPsych.randomization.shuffle([...testTrials, ...controlTrials]);
 
+    // Select only the first TOTAL_TRIALS
+    const selectedTrials = allTrials.slice(0, TOTAL_TRIALS);
+
     //Participant Info
     this.timeline.push({
       type: jsPsychSurveyText,
@@ -174,7 +183,7 @@
       preamble: "<p>Please fill in the following information:</p>",
     });
    
-    this.timeline.push(...allTrials);
+    this.timeline.push(...selectedTrials);
 
     //Save the data
     this.timeline.push({
@@ -223,6 +232,8 @@
         data.choice = imageSet[data.response];
         data.correct = data.target === data.choice;
         data.isControl = isControl; // Log if this was a control trial
+        data.language = selectedLanguage; // Add selectedLanguage to each trial
+
       },
     };
   }
