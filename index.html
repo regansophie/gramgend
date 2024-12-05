@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tablet Experiment</title>
+
+    <!-- Include jsPsych Core and Plugins -->
+    <script src="utils.js"></script>
+    <script src="jspsych/jspsych.js"></script>
+    <script src="jspsych/plugin-survey-html-form.js"></script>
+    <script src="jspsych/plugin-html-button-response.js"></script>
+    <script src="jspsych/plugin-preload.js"></script>
+    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>
+    <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
+    <script src="jspsych/plugin-survey-text.js"></script>
+    <script src="jspsych/plugin-instructions.js"></script>
+    <script src="jspsych/plugin-image-button-response.js"></script>
+    <script src="jspsych/plugin-instructions.js"></script>
+
+    <!-- Responsive and Tablet-Friendly CSS -->
+      <style>
+    /* Basic button styling */
+    .image-btn {
+      background: none;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+      outline: none; /* Remove default blue outline */
+    }
+
+    /* Image styling */
+    .image-choice {
+      max-width: 1500px;
+      max-height: 1500px;
+      object-fit: contain;
+      touch-action: manipulation;
+    }
+
+    /* Custom active and hover states */
+    .image-btn:active {
+      border: 2px solid #007BFF;
+    }
+
+    .image-btn:hover {
+      border: 2px solid #007BFF; /* Optional hover state for debugging */
+    }
+
+    /* Keep focus ring for keyboard navigation only */
+    .image-btn:focus-visible {
+      outline: 2px solid #007BFF; /* Optional focus styling for accessibility */
+    }
+
+    img {
+      width: 350px;
+      height: 350px;
+    }
+  </style>
+
+  </head>
+
+  <body>
+  </body>
+
+  <script>
+   const NUM_DISTRACTORS = 5; // Keep this constant for now
+
+    let session;
+
+    async function init() {
+  const jsPsych = initJsPsych();
+
+  // Ask for the language selection
+  const languageSelection = {
+    type: jsPsychHtmlButtonResponse,
+    stimulus: '<p>Please select the language for the experiment:</p>',
+    choices: ['Hindi', 'Gujarati'],
+  };
+
+  const selectedLanguage = await jsPsych.run([languageSelection]).then(() => {
+    return jsPsych.data.get().last(1).values()[0].response === 0 ? 'Hindi' : 'Gujarati';
+  });
+
+  console.log(`Selected language: ${selectedLanguage}`);
+
+  // Adjust the base audio path based on the language selection
+  const BASE_AUDIO_PATH = `edited audio/${selectedLanguage}/Final Audio/`;
+  const base_audio_without_final = `edited audio/${selectedLanguage}`;
+  
+
+  console.log("Loading image data...");
+  const imageResponse = await fetch("image-data.json");
+  const imageData = await imageResponse.json();
+
+  console.log("Loading audio data...");
+  const audioResponse = await fetch("audio-data.json");
+  const audioData = await audioResponse.json();
+
+  console.log("Validating files...");
+  const validFiles = imageData.images.filter((img) => {
+    const imageName = img.split("/").pop().split(".")[0];
+    const regularAudio = `${BASE_AUDIO_PATH}${imageName}.wav`;
+    return audioData.audio.some((audio) => audio.includes(regularAudio));
+  });
+
+  console.log(`Total trials: ${validFiles.length}`);
+  const preload = {
+    type: jsPsychPreload,
+    images: validFiles,
+    audio: validFiles.map((img) => {
+      const imageName = img.split("/").pop().split(".")[0];
+      return `${BASE_AUDIO_PATH}${imageName}.wav`;
+    }),
+  };
+
+
+  const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final);
+
+  jsPsych.run([preload, ...session.timeline]);
+}
+
+
+
+
+    // Initialize the experiment
+    init();
+      
+
+
+  // Validate that each image has a corresponding audio file
+    function validateFiles(images, audioFiles) {
+      const mismatchedFiles = images.filter((img) => {
+        // Extract the base name (last word before the extension)
+        const imageName = img.split("/").pop().split(".")[0];
+        const correspondingAudio = `${imageName}.wav`;
+
+        return !audioFiles.some((audio) => audio.endsWith(correspondingAudio));
+      });
+
+    if (mismatchedFiles.length > 0) {
+      console.error("Mismatch between images and audio files. Mismatched files:", mismatchedFiles);
+      return false;
+    }
+
+    return true;
+  }
+
+ class Session {
+  constructor(jsPsych, imageData, audioData, base_audio_path) {
+    this.jsPsych = jsPsych;
+    this.images = imageData.images;
+    this.audioFiles = audioData.audio;
+    this.timeline = [];
+    this.base_audio_path = base_audio_path; // Assign it here
+
+    // Generate test and control trials
+    const testTrials = this.createTrials(this.images, false, this.base_audio_path); // Regular test trials
+    const controlTrials = this.createTrials(this.images, true, this.base_audio_path); // Control trials
+
+    // Combine and randomize
+    const allTrials = jsPsych.randomization.shuffle([...testTrials, ...controlTrials]);
+    this.timeline.push(...allTrials);
+
+    // End of experiment message
+    this.timeline.push({
+      type: jsPsychInstructions,
+      pages: ["<p>You have finished the experiment. Thank you for participating.</p>"],
+      show_clickable_nav: true,
+      allow_backward: false,
+      button_label_next: "Exit",
+    });
+  }
+
+  createTrials(words, isControl, base_audio_path) {
+    return words.map((word) => {
+      // Sample distractors without removing them permanently
+    const distractors = this.jsPsych.randomization.sampleWithoutReplacement(
+        this.images.filter((img) => img !== word),
+        NUM_DISTRACTORS
+      );
+
+      const imageSet = [word, ...distractors];
+      return this.createTrial(word, this.jsPsych.randomization.shuffle(imageSet), isControl);
+    });
+  }
+
+  createTrial(targetImage, imageSet, isControl, base_audio_path) {
+    console.log(`base_audio_path: ${this.base_audio_path}`);
+    const audioFolder = isControl ? "Control - Final Audio" : "Final Audio";
+    const audioPath = `${this.base_audio_path}/${audioFolder}/${targetImage.split('/').pop().replace('.png', '.wav')}`;
+    console.log(`path: ${audioPath}`);
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '',
+      choices: imageSet.map((img) => `<img src="${img}" class="image-choice">`),
+      prompt: `<audio src="${audioPath}" autoplay></audio>`,
+      on_finish: function (data) {
+        data.target = targetImage;
+        data.choice = imageSet[data.response];
+        data.correct = data.target === data.choice;
+        data.isControl = isControl; // Log if this was a control trial
+      },
+    };
+  }
+}
+
+
+  </script>
+</html>
