@@ -73,6 +73,7 @@
     async function init() {
       const jsPsych = initJsPsych();
 
+
       // Ask for the language selection
       const languageSelection = {
         type: jsPsychHtmlButtonResponse,
@@ -144,8 +145,24 @@
       await preloadAudio(validFiles);
       console.log("Audio files preloaded.");
 
+        // Unlock audio context
+      const unlockAudio = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: '<p>Tap the button below to enable audio playback.</p>',
+        choices: ['Enable Audio'],
+        on_finish: () => {
+          const audioContext = jsPsych.pluginAPI.audioContext();
+          if (audioContext) {
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+          }
+        },
+      };
 
-      const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final);
+      const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final, preloadedAudio);
 
       jsPsych.run([preload, ...session.timeline]);
     }
@@ -174,16 +191,18 @@
   }
 
  class Session {
-  constructor(jsPsych, imageData, audioData, base_audio_path) {
+  constructor(jsPsych, imageData, audioData, base_audio_path, preloadedAudio) {
     this.jsPsych = jsPsych;
     this.images = imageData.images;
     this.audioFiles = audioData.audio;
     this.timeline = [];
-    this.base_audio_path = base_audio_path; // Assign it here
+    this.base_audio_path = base_audio_path; 
+    this.preloadedAudio = preloadedAudio; 
+
 
     // Generate test and control trials
-    const testTrials = this.createTrials(this.images, false, this.base_audio_path); // Regular test trials
-    const controlTrials = this.createTrials(this.images, true, this.base_audio_path); // Control trials
+    const testTrials = this.createTrials(this.images, false, this.base_audio_path, this.preloadedAudio); // Regular test trials
+    const controlTrials = this.createTrials(this.images, true, this.base_audio_path, this.preloadedAudio); // Control trials
 
     // Combine and randomize
     const allTrials = jsPsych.randomization.shuffle([...testTrials, ...controlTrials]);
@@ -230,7 +249,8 @@
     });
   }
 
-  createTrials(words, isControl, base_audio_path) {
+  createTrials(words, isControl, base_audio_path, preloadedAudio) {
+    this.preloadedAudio = preloadedAudio;
     return words.map((word) => {
       // Sample distractors without removing them permanently
     const distractors = this.jsPsych.randomization.sampleWithoutReplacement(
@@ -239,17 +259,17 @@
       );
 
       const imageSet = [word, ...distractors];
-      return this.createTrial(word, this.jsPsych.randomization.shuffle(imageSet), isControl);
+      return this.createTrial(word, this.jsPsych.randomization.shuffle(imageSet), isControl, this.preloadedAudio);
     });
   }
 
-  createTrial(targetImage, imageSet, isControl) {
-    const audio = preloadedAudio[targetImage.split("/").pop().replace(".png", "")];
+  createTrial(targetImage, imageSet, isControl, preloadedAudio) {
+    this.preloadedAudio = preloadedAudio;
+    const audio = this.preloadedAudio[targetImage.split("/").pop().replace(".png", "")];
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: '',
       choices: imageSet.map((img) => `<img src="${img}" class="image-choice">`),
-      prompt: '<p>Listen to the prompt and select the correct image.</p>',
       on_load: () => {
         console.log(`Playing preloaded audio for: ${targetImage}`);
         audio.play();
