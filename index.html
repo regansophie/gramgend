@@ -117,11 +117,32 @@
       const preload = {
         type: jsPsychPreload,
         images: validFiles,
-        audio: validFiles.map((img) => {
-          const imageName = img.split("/").pop().split(".")[0];
-          return `${BASE_AUDIO_PATH}${imageName}.wav`;
-        }),
       };
+
+
+    let preloadedAudio = {};
+
+    async function preloadAudio(validFiles) {
+      for (const img of validFiles) {
+        const imageName = img.split("/").pop().split(".")[0];
+        const audioPath = `${BASE_AUDIO_PATH}${imageName}.wav`;
+        const audio = new Audio(audioPath);
+
+        // Force the browser to load the audio
+        await new Promise((resolve, reject) => {
+          audio.oncanplaythrough = resolve;
+          audio.onerror = reject;
+          audio.load();
+        });
+
+        preloadedAudio[imageName] = audio;
+        console.log(`Preloaded audio: ${audioPath}`);
+      }
+    }
+
+      console.log("Preloading audio files...");
+      await preloadAudio(validFiles);
+      console.log("Audio files preloaded.");
 
 
       const session = new Session(jsPsych, { images: validFiles }, audioData, base_audio_without_final);
@@ -222,23 +243,23 @@
     });
   }
 
-  createTrial(targetImage, imageSet, isControl, base_audio_path) {
-    console.log(`base_audio_path: ${this.base_audio_path}`);
-    const audioFolder = isControl ? "Control - Final Audio" : "Final Audio";
-    const audioPath = `${this.base_audio_path}/${audioFolder}/${targetImage.split('/').pop().replace('.png', '.wav')}`;
-    console.log(`path: ${audioPath}`);
+  createTrial(targetImage, imageSet, isControl) {
+    const audio = preloadedAudio[targetImage.split("/").pop().replace(".png", "")];
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: '',
       choices: imageSet.map((img) => `<img src="${img}" class="image-choice">`),
-      prompt: `<audio src="${audioPath}" autoplay></audio>`,
+      prompt: '<p>Listen to the prompt and select the correct image.</p>',
+      on_load: () => {
+        console.log(`Playing preloaded audio for: ${targetImage}`);
+        audio.play();
+      },
       on_finish: function (data) {
         data.target = targetImage;
         data.choice = imageSet[data.response];
         data.correct = data.target === data.choice;
-        data.isControl = isControl; // Log if this was a control trial
-        data.language = selectedLanguage; // Add selectedLanguage to each trial
-
+        data.isControl = isControl;
+        data.language = selectedLanguage;
       },
     };
   }
